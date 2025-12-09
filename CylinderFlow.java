@@ -199,21 +199,30 @@ public class CylinderFlow {
         // ============================================
         model.result().create("pg1", "PlotGroup2D");
         model.result("pg1").label("Velocity Magnitude");
+        model.result("pg1").set("titletype", "none"); // Hide title
+        model.result("pg1").set("showlegends", "off"); // Hide legends
         model.result("pg1").create("surf1", "Surface");
         model.result("pg1").feature("surf1").set("expr", "spf.U");
         model.result("pg1").feature("surf1").set("colortable", "RainbowLight");
+        model.result("pg1").feature("surf1").set("colorlegend", "off"); // Ensure surface legend is off
 
         model.result().create("pg2", "PlotGroup2D");
         model.result("pg2").label("Vorticity");
+        model.result("pg2").set("titletype", "none"); // Hide title
+        model.result("pg2").set("showlegends", "off"); // Hide legends
         model.result("pg2").create("surf1", "Surface");
         model.result("pg2").feature("surf1").set("expr", "spf.vorticityz");
         model.result("pg2").feature("surf1").set("colortable", "Cyclic");
+        model.result("pg2").feature("surf1").set("colorlegend", "off"); // Ensure surface legend is off
 
         model.result().create("pg3", "PlotGroup2D");
         model.result("pg3").label("Pressure");
+        model.result("pg3").set("titletype", "none"); // Hide title
+        model.result("pg3").set("showlegends", "off"); // Hide legends
         model.result("pg3").create("surf1", "Surface");
         model.result("pg3").feature("surf1").set("expr", "p");
         model.result("pg3").feature("surf1").set("colortable", "ThermalWave");
+        model.result("pg3").feature("surf1").set("colorlegend", "off"); // Ensure surface legend is off
 
         // Ensure plotting is on for image export
         model.result("pg1").run();
@@ -266,7 +275,6 @@ public class CylinderFlow {
             if (config.exportVelocity) {
                 try {
                     System.out.println("Updating plot group 1 (Velocity)...");
-                    model.result("pg1").set("showlegends", true);
                     model.result("pg1").run();
 
                     System.out.println("Exporting velocity.png to " + validPath + "velocity.png");
@@ -274,7 +282,6 @@ public class CylinderFlow {
                     model.result().export("img1").set("sourceobject", "pg1");
                     model.result().export("img1").set("filename", validPath + "velocity.png");
                     model.result().export("img1").set("zoomextents", "on");
-                    model.result().export("img1").set("legend", true);
                     model.result().export("img1").run();
                     System.out.println("SUCCESS: Exported velocity.png");
                 } catch (Throwable e) {
@@ -288,7 +295,6 @@ public class CylinderFlow {
             if (config.exportVorticity) {
                 try {
                     System.out.println("Updating plot group 2 (Vorticity)...");
-                    model.result("pg2").set("showlegends", true);
                     model.result("pg2").run();
 
                     System.out.println("Exporting vorticity.png to " + validPath + "vorticity.png");
@@ -296,7 +302,6 @@ public class CylinderFlow {
                     model.result().export("img2").set("sourceobject", "pg2");
                     model.result().export("img2").set("filename", validPath + "vorticity.png");
                     model.result().export("img2").set("zoomextents", "on");
-                    model.result().export("img2").set("legend", true);
                     model.result().export("img2").run();
                     System.out.println("SUCCESS: Exported vorticity.png");
                 } catch (Throwable e) {
@@ -310,7 +315,6 @@ public class CylinderFlow {
             if (config.exportVorticity) {
                 try {
                     System.out.println("Updating plot group 3 (Pressure)...");
-                    model.result("pg3").set("showlegends", true);
                     model.result("pg3").run();
 
                     System.out.println("Exporting pressure.png to " + validPath + "pressure.png");
@@ -318,7 +322,6 @@ public class CylinderFlow {
                     model.result().export("img3").set("sourceobject", "pg3");
                     model.result().export("img3").set("filename", validPath + "pressure.png");
                     model.result().export("img3").set("zoomextents", "on");
-                    model.result().export("img3").set("legend", true);
                     model.result().export("img3").run();
                     System.out.println("SUCCESS: Exported pressure.png");
                 } catch (Throwable e) {
