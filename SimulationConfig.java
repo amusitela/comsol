@@ -72,9 +72,19 @@ public class SimulationConfig {
     public String modelFileName = "CylinderFlow.mph";
     public boolean exportVelocity = true;
     public boolean exportVorticity = true;
+    public boolean exportPressure = true;
     public boolean exportAnimation = true;
     public int animationFps = 60;
     public int animationMaxFrames = 200;
+
+    // ============================================
+    // 8. 压力云图颜色范围 (Pressure Color Range)
+    // ============================================
+    // 手动锁定压力颜色范围，解决动画和PNG颜色不一致问题
+    // 设置为true启用手动范围，避免初始压力冲击导致动画"死灰"
+    public boolean pressureRangeManual = true;
+    public double pressureRangeMin = -2.0; // 压力最小值 (Pa)
+    public double pressureRangeMax = 2.0; // 压力最大值 (Pa)
 
     // ============================================
     // 工厂方法

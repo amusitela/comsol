@@ -224,6 +224,16 @@ public class CylinderFlow {
         model.result("pg3").feature("surf1").set("colortable", "ThermalWave");
         model.result("pg3").feature("surf1").set("colorlegend", "off"); // Ensure surface legend is off
 
+        // 手动锁定压力颜色范围，解决动画和PNG颜色不一致的问题
+        // 当pressureRangeManual=true时，PNG和GIF都使用固定的颜色范围
+        if (config.pressureRangeManual) {
+            model.result("pg3").feature("surf1").set("rangecoloractive", "on");
+            model.result("pg3").feature("surf1").set("rangecolormin", config.pressureRangeMin);
+            model.result("pg3").feature("surf1").set("rangecolormax", config.pressureRangeMax);
+            System.out.println("Pressure color range locked: [" + config.pressureRangeMin + ", "
+                    + config.pressureRangeMax + "] Pa");
+        }
+
         // Ensure plotting is on for image export
         model.result("pg1").run();
         model.result("pg2").run();
@@ -312,7 +322,7 @@ public class CylinderFlow {
             }
 
             // Export pressure image if enabled
-            if (config.exportVorticity) {
+            if (config.exportPressure) {
                 try {
                     System.out.println("Updating plot group 3 (Pressure)...");
                     model.result("pg3").run();
