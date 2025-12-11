@@ -80,11 +80,40 @@ public class SimulationConfig {
     // ============================================
     // 8. 压力云图颜色范围 (Pressure Color Range)
     // ============================================
-    // 手动锁定压力颜色范围，解决动画和PNG颜色不一致问题
-    // 设置为true启用手动范围，避免初始压力冲击导致动画"死灰"
-    public boolean pressureRangeManual = true;
-    public double pressureRangeMin = -2.0; // 压力最小值 (Pa)
-    public double pressureRangeMax = 2.0; // 压力最大值 (Pa)
+    // 锁定压力颜色范围，解决动画和PNG颜色不一致问题
+    // pressureRangeAuto=true: 基于动压自动计算范围
+    // pressureRangeAuto=false: 使用手动指定的 pressureRangeMin/Max
+    public boolean pressureRangeAuto = true; // 自动计算压力范围
+    public double pressureRangeFactor = 2.0; // 动压倍数因子（范围 = ±factor*q）
+    public double pressureRangeMin = -50.0; // 手动模式：压力最小值 (Pa)
+    public double pressureRangeMax = 50.0; // 手动模式：压力最大值 (Pa)
+
+    /**
+     * 计算动压 q = 0.5 * rho * U^2
+     */
+    public double getDynamicPressure() {
+        return 0.5 * density * inletVelocity * inletVelocity;
+    }
+
+    /**
+     * 获取压力范围最小值（自动或手动）
+     */
+    public double getEffectivePressureMin() {
+        if (pressureRangeAuto) {
+            return -pressureRangeFactor * getDynamicPressure();
+        }
+        return pressureRangeMin;
+    }
+
+    /**
+     * 获取压力范围最大值（自动或手动）
+     */
+    public double getEffectivePressureMax() {
+        if (pressureRangeAuto) {
+            return pressureRangeFactor * getDynamicPressure();
+        }
+        return pressureRangeMax;
+    }
 
     // ============================================
     // 工厂方法

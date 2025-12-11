@@ -224,14 +224,18 @@ public class CylinderFlow {
         model.result("pg3").feature("surf1").set("colortable", "ThermalWave");
         model.result("pg3").feature("surf1").set("colorlegend", "off"); // Ensure surface legend is off
 
-        // 手动锁定压力颜色范围，解决动画和PNG颜色不一致的问题
-        // 当pressureRangeManual=true时，PNG和GIF都使用固定的颜色范围
-        if (config.pressureRangeManual) {
-            model.result("pg3").feature("surf1").set("rangecoloractive", "on");
-            model.result("pg3").feature("surf1").set("rangecolormin", config.pressureRangeMin);
-            model.result("pg3").feature("surf1").set("rangecolormax", config.pressureRangeMax);
-            System.out.println("Pressure color range locked: [" + config.pressureRangeMin + ", "
-                    + config.pressureRangeMax + "] Pa");
+        // 锁定压力颜色范围，解决动画和PNG颜色不一致的问题
+        // 使用自动计算（基于动压）或手动指定的范围
+        double pMin = config.getEffectivePressureMin();
+        double pMax = config.getEffectivePressureMax();
+        model.result("pg3").feature("surf1").set("rangecoloractive", "on");
+        model.result("pg3").feature("surf1").set("rangecolormin", pMin);
+        model.result("pg3").feature("surf1").set("rangecolormax", pMax);
+        if (config.pressureRangeAuto) {
+            System.out.println("Pressure color range (auto): [" + pMin + ", " + pMax + "] Pa (factor="
+                    + config.pressureRangeFactor + ", q=" + config.getDynamicPressure() + ")");
+        } else {
+            System.out.println("Pressure color range (manual): [" + pMin + ", " + pMax + "] Pa");
         }
 
         // Ensure plotting is on for image export
