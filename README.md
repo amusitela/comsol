@@ -226,5 +226,5 @@ model.result().export("anim1").set("frames", "all");  // 导出所有时间步
 ## 如何运行
 
 1.  确保电脑已安装 COMSOL 6.0。
-2.  双击运行 `run_comsol.bat`。
+2.  双击运行 `run_gui.bat`。
 3.  程序将自动编译 Java 代码，调用 COMSOL 内核进行计算，并最终在当前目录生成结果文件。
