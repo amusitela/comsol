@@ -1,7 +1,7 @@
 /*
  * CylinderFlowGUI.java - COMSOL 仿真配置 GUI
  * 避免匿名内部类，兼容 COMSOL 编译器
- * 集成 Gemini AI 自然语言配置助手
+ * 集成 Qwen AI 自然语言配置助手
  */
 
 import java.awt.BorderLayout;
@@ -53,7 +53,7 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
     private JButton loadBtn, saveBtn, defaultBtn, runBtn;
 
     // AI 助手相关字段
-    private GeminiClient geminiClient;
+    private QwenClient QwenClient;
     private JTextArea aiChatHistory;
     private JTextField aiInputField;
     private JButton aiSendBtn, aiApplyBtn, aiClearBtn;
@@ -75,14 +75,14 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
 
     public CylinderFlowGUI() {
         loadConfig();
-        initGeminiClient();
+        initQwenClient();
         initUI();
     }
 
-    private void initGeminiClient() {
-        geminiClient = new GeminiClient();
-        if (!geminiClient.isConfigured()) {
-            System.out.println("提示: 设置环境变量 GEMINI_API_KEY 以启用 AI 助手功能");
+    private void initQwenClient() {
+        QwenClient = new QwenClient();
+        if (!QwenClient.isConfigured()) {
+            System.out.println("提示: 设置环境变量 Qwen_API_KEY 以启用 AI 助手功能");
         }
     }
 
@@ -156,7 +156,7 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         tabbedPane.addTab("网格参数", createMeshPanel());
         tabbedPane.addTab("求解参数", createSolverPanel());
         tabbedPane.addTab("输出参数", createOutputPanel());
-        tabbedPane.addTab("🤖 AI 助手", createAIPanel());
+        tabbedPane.addTab("AI 助手", createAIPanel());
 
         return tabbedPane;
     }
@@ -352,16 +352,16 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         JPanel statusPanel = new JPanel(new BorderLayout());
         statusPanel.setBackground(BG_PANEL);
 
-        JLabel aiTitle = new JLabel("🤖 AI 配置助手 (Gemini)");
+        JLabel aiTitle = new JLabel("AI 配置助手 (Qwen)");
         aiTitle.setFont(new Font("Microsoft YaHei UI", Font.BOLD, 16));
         aiTitle.setForeground(ACCENT_PURPLE);
 
         JLabel statusLabel = new JLabel();
-        if (geminiClient.isConfigured()) {
-            statusLabel.setText("✓ API 已配置");
+        if (QwenClient.isConfigured()) {
+            statusLabel.setText("API 已配置");
             statusLabel.setForeground(ACCENT_GREEN);
         } else {
-            statusLabel.setText("✗ 请设置环境变量 GEMINI_API_KEY");
+            statusLabel.setText("请设置环境变量 Qwen_API_KEY");
             statusLabel.setForeground(ACCENT_ORANGE);
         }
         statusLabel.setFont(new Font("Microsoft YaHei UI", Font.PLAIN, 12));
@@ -406,7 +406,7 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         aiChangesPreview.setWrapStyleWord(true);
         aiChangesPreview.setBackground(new Color(240, 248, 255));
         aiChangesPreview.setForeground(TEXT_PRIMARY);
-        aiChangesPreview.setFont(new Font("Consolas", Font.PLAIN, 12));
+        aiChangesPreview.setFont(new Font("Microsoft YaHei UI", Font.PLAIN, 12));
         aiChangesPreview.setBorder(new EmptyBorder(8, 8, 8, 8));
         aiChangesPreview.setText("(暂无变更)");
 
@@ -418,7 +418,7 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         JPanel changesBtnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
         changesBtnPanel.setBackground(BG_PANEL);
 
-        aiApplyBtn = new JButton("✓ 应用变更");
+        aiApplyBtn = new JButton("应用变更");
         aiApplyBtn.setBackground(ACCENT_GREEN);
         aiApplyBtn.setForeground(Color.WHITE);
         aiApplyBtn.setFocusPainted(false);
@@ -426,7 +426,7 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         aiApplyBtn.setEnabled(false);
         aiApplyBtn.addActionListener(this);
 
-        aiClearBtn = new JButton("✗ 清除");
+        aiClearBtn = new JButton("清除");
         aiClearBtn.setBackground(ACCENT_ORANGE);
         aiClearBtn.setForeground(Color.WHITE);
         aiClearBtn.setFocusPainted(false);
@@ -502,8 +502,8 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         if (userInput.isEmpty())
             return;
 
-        if (!geminiClient.isConfigured()) {
-            appendToChatHistory("系统", "请先设置环境变量 GEMINI_API_KEY 以使用 AI 助手功能。");
+        if (!QwenClient.isConfigured()) {
+            appendToChatHistory("系统", "请先设置环境变量 Qwen_API_KEY 以使用 AI 助手功能。");
             return;
         }
 
@@ -522,7 +522,7 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
             @Override
             protected AIConfigParser.ParseResult doInBackground() throws Exception {
                 String systemPrompt = AIConfigParser.generateSystemPrompt(config);
-                String response = geminiClient.chat(userInput, systemPrompt);
+                String response = QwenClient.chat(userInput, systemPrompt);
                 return AIConfigParser.parseAIResponse(response, config);
             }
 
@@ -553,8 +553,12 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
             pendingChanges = result.changes;
             StringBuilder sb = new StringBuilder();
             for (AIConfigParser.ConfigChange change : result.changes) {
+                // 显示中文名和英文字段名
                 sb.append(change.fieldLabel).append(" (").append(change.fieldName).append(")\n");
-                sb.append("  ").append(change.oldValue).append(" → ").append(change.newValue).append("\n\n");
+                // 格式化数值，科学计数法用大写E
+                String oldVal = formatValue(change.oldValue);
+                String newVal = formatValue(change.newValue);
+                sb.append("  ").append(oldVal).append(" -> ").append(newVal).append("\n\n");
             }
             aiChangesPreview.setText(sb.toString());
             aiApplyBtn.setEnabled(true);
@@ -568,11 +572,11 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
     private void appendToChatHistory(String sender, String message) {
         String prefix = "";
         if ("你".equals(sender)) {
-            prefix = "👤 你: ";
+            prefix = "你: ";
         } else if ("AI".equals(sender)) {
-            prefix = "🤖 AI: ";
+            prefix = "AI: ";
         } else {
-            prefix = "⚙️ " + sender + ": ";
+            prefix = sender + ": ";
         }
         aiChatHistory.append(prefix + message + "\n\n");
     }
@@ -603,6 +607,14 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         aiApplyBtn.setEnabled(false);
         aiClearBtn.setEnabled(false);
         appendToChatHistory("系统", "已清除待应用的变更。");
+    }
+
+    // 格式化数值显示，科学计数法用大写E
+    private String formatValue(String value) {
+        if (value == null)
+            return "";
+        // 将小写 e 转换为大写 E（科学计数法）
+        return value.replace("e-", "E-").replace("e+", "E+");
     }
 
     private JPanel createButtonPanel() {

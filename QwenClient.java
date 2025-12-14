@@ -1,7 +1,6 @@
 /*
- * GeminiClient.java - AI API 调用封装
- * 支持多个 AI 服务商：Qwen (通义千问) 优先，DeepSeek 备用
- * 从环境变量或 .env 文件读取 API Key
+ * QwenClient.java - AI API 调用封装
+ * 支持 Qwen (通义千问) 优先，DeepSeek 备用
  */
 
 import java.io.BufferedReader;
@@ -13,14 +12,13 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
-public class GeminiClient {
+public class QwenClient {
 
-    // API 配置
     private static final String ENV_FILE = ".env";
 
-    // Qwen (阿里通义千问) - OpenAI 兼容模式
+    // Qwen (阿里通义千问)
     private static final String QWEN_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
-    private static final String QWEN_MODEL = "qwen-turbo"; // 也可用 qwen-plus, qwen-max
+    private static final String QWEN_MODEL = "qwen-turbo";
 
     // DeepSeek (备用)
     private static final String DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
@@ -28,15 +26,14 @@ public class GeminiClient {
 
     private String qwenApiKey;
     private String deepseekApiKey;
-    private String activeProvider = null; // 当前成功的提供商
+    private String activeProvider = null;
 
-    public GeminiClient() {
+    public QwenClient() {
         // 加载 Qwen API Key
         qwenApiKey = System.getenv("QWEN_API_KEY");
         if (qwenApiKey == null || qwenApiKey.isEmpty()) {
             qwenApiKey = loadFromEnvFile("QWEN_API_KEY");
         }
-        // 兼容 DASHSCOPE_API_KEY
         if (qwenApiKey == null || qwenApiKey.isEmpty()) {
             qwenApiKey = System.getenv("DASHSCOPE_API_KEY");
         }
@@ -50,15 +47,14 @@ public class GeminiClient {
             deepseekApiKey = loadFromEnvFile("DEEPSEEK_API_KEY");
         }
 
-        // 状态输出
         if (qwenApiKey != null && !qwenApiKey.isEmpty()) {
-            System.out.println("✓ Qwen API Key 已加载");
+            System.out.println("[OK] Qwen API Key 已加载");
         }
         if (deepseekApiKey != null && !deepseekApiKey.isEmpty()) {
-            System.out.println("✓ DeepSeek API Key 已加载 (备用)");
+            System.out.println("[OK] DeepSeek API Key 已加载 (备用)");
         }
         if (!isConfigured()) {
-            System.err.println("警告: 未找到任何 API Key (QWEN_API_KEY 或 DEEPSEEK_API_KEY)");
+            System.err.println("[警告] 未找到 QWEN_API_KEY 或 DEEPSEEK_API_KEY");
         }
     }
 
@@ -95,7 +91,7 @@ public class GeminiClient {
         return null;
     }
 
-    public GeminiClient(String apiKey) {
+    public QwenClient(String apiKey) {
         this.qwenApiKey = apiKey;
     }
 
@@ -104,10 +100,6 @@ public class GeminiClient {
                 (deepseekApiKey != null && !deepseekApiKey.isEmpty());
     }
 
-    /**
-     * 发送消息到 AI API 并获取响应
-     * 优先使用 Qwen，失败则降级到 DeepSeek
-     */
     public String chat(String userMessage, String systemPrompt) throws Exception {
         if (!isConfigured()) {
             throw new Exception("API Key 未配置。请在 .env 文件中设置 QWEN_API_KEY 或 DEEPSEEK_API_KEY");
@@ -115,43 +107,38 @@ public class GeminiClient {
 
         Exception lastError = null;
 
-        // 1. 优先尝试 Qwen
+        // 优先 Qwen
         if (qwenApiKey != null && !qwenApiKey.isEmpty()) {
             try {
                 String result = callApi(QWEN_API_URL, QWEN_MODEL, qwenApiKey, userMessage, systemPrompt);
                 if (activeProvider == null) {
                     activeProvider = "Qwen";
-                    System.out.println("使用 AI 服务: Qwen (通义千问)");
+                    System.out.println("使用 AI: Qwen (通义千问)");
                 }
                 return result;
             } catch (Exception e) {
                 lastError = e;
-                System.out.println("Qwen 请求失败: " + e.getMessage());
-                System.out.println("尝试使用 DeepSeek 备用...");
+                System.out.println("Qwen 失败: " + e.getMessage());
             }
         }
 
-        // 2. 降级到 DeepSeek
+        // 备用 DeepSeek
         if (deepseekApiKey != null && !deepseekApiKey.isEmpty()) {
             try {
                 String result = callApi(DEEPSEEK_API_URL, DEEPSEEK_MODEL, deepseekApiKey, userMessage, systemPrompt);
                 if (activeProvider == null || !activeProvider.equals("DeepSeek")) {
                     activeProvider = "DeepSeek";
-                    System.out.println("使用 AI 服务: DeepSeek (备用)");
+                    System.out.println("使用 AI: DeepSeek (备用)");
                 }
                 return result;
             } catch (Exception e) {
                 lastError = e;
-                System.out.println("DeepSeek 请求也失败: " + e.getMessage());
             }
         }
 
         throw lastError != null ? lastError : new Exception("所有 AI 服务均不可用");
     }
 
-    /**
-     * 调用指定的 AI API
-     */
     private String callApi(String apiUrl, String model, String apiKey,
             String userMessage, String systemPrompt) throws Exception {
         String requestBody = buildRequestBody(model, userMessage, systemPrompt);
@@ -168,18 +155,13 @@ public class GeminiClient {
             conn.setReadTimeout(120000);
 
             try (OutputStream os = conn.getOutputStream()) {
-                byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
-                os.write(input, 0, input.length);
+                os.write(requestBody.getBytes(StandardCharsets.UTF_8));
             }
 
-            int responseCode = conn.getResponseCode();
-
-            BufferedReader reader;
-            if (responseCode >= 200 && responseCode < 300) {
-                reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
-            } else {
-                reader = new BufferedReader(new InputStreamReader(conn.getErrorStream(), StandardCharsets.UTF_8));
-            }
+            int code = conn.getResponseCode();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream(),
+                    StandardCharsets.UTF_8));
 
             StringBuilder response = new StringBuilder();
             String line;
@@ -188,12 +170,11 @@ public class GeminiClient {
             }
             reader.close();
 
-            if (responseCode >= 200 && responseCode < 300) {
+            if (code >= 200 && code < 300) {
                 return extractContent(response.toString());
             } else {
-                throw new Exception("HTTP " + responseCode + ": " + response.toString());
+                throw new Exception("HTTP " + code + ": " + response.toString());
             }
-
         } finally {
             conn.disconnect();
         }
@@ -201,49 +182,38 @@ public class GeminiClient {
 
     private String buildRequestBody(String model, String userMessage, String systemPrompt) {
         StringBuilder sb = new StringBuilder();
-        sb.append("{\n");
-        sb.append("  \"model\": \"").append(model).append("\",\n");
-        sb.append("  \"messages\": [\n");
-
+        sb.append("{\"model\":\"").append(model).append("\",\"messages\":[");
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            sb.append("    {\"role\": \"system\", \"content\": ").append(escapeJson(systemPrompt)).append("},\n");
+            sb.append("{\"role\":\"system\",\"content\":").append(escapeJson(systemPrompt)).append("},");
         }
-
-        sb.append("    {\"role\": \"user\", \"content\": ").append(escapeJson(userMessage)).append("}\n");
-        sb.append("  ],\n");
-        sb.append("  \"temperature\": 0.3,\n");
-        sb.append("  \"max_tokens\": 2048\n");
-        sb.append("}");
-
+        sb.append("{\"role\":\"user\",\"content\":").append(escapeJson(userMessage)).append("}");
+        sb.append("],\"temperature\":0.3,\"max_tokens\":2048}");
         return sb.toString();
     }
 
-    private String extractContent(String jsonResponse) {
-        int contentStart = jsonResponse.indexOf("\"content\":");
-        if (contentStart == -1)
-            return "无法解析 API 响应";
-
-        contentStart = jsonResponse.indexOf("\"", contentStart + 10);
-        if (contentStart == -1)
-            return "无法解析 API 响应";
-
-        int contentEnd = findEndOfJsonString(jsonResponse, contentStart + 1);
-        if (contentEnd == -1)
-            return "无法解析 API 响应";
-
-        return unescapeJson(jsonResponse.substring(contentStart + 1, contentEnd));
+    private String extractContent(String json) {
+        int i = json.indexOf("\"content\":");
+        if (i == -1)
+            return "无法解析响应";
+        i = json.indexOf("\"", i + 10);
+        if (i == -1)
+            return "无法解析响应";
+        int j = findEndQuote(json, i + 1);
+        if (j == -1)
+            return "无法解析响应";
+        return unescapeJson(json.substring(i + 1, j));
     }
 
-    private int findEndOfJsonString(String json, int start) {
-        boolean escaped = false;
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (escaped) {
-                escaped = false;
+    private int findEndQuote(String s, int start) {
+        boolean esc = false;
+        for (int i = start; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (esc) {
+                esc = false;
                 continue;
             }
             if (c == '\\') {
-                escaped = true;
+                esc = true;
                 continue;
             }
             if (c == '"')
@@ -252,12 +222,11 @@ public class GeminiClient {
         return -1;
     }
 
-    private String escapeJson(String text) {
-        if (text == null)
+    private String escapeJson(String s) {
+        if (s == null)
             return "\"\"";
         StringBuilder sb = new StringBuilder("\"");
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
+        for (char c : s.toCharArray()) {
             switch (c) {
                 case '"':
                     sb.append("\\\"");
@@ -275,30 +244,21 @@ public class GeminiClient {
                     sb.append("\\t");
                     break;
                 default:
-                    if (c < ' ')
-                        sb.append(String.format("\\u%04x", (int) c));
-                    else
-                        sb.append(c);
+                    sb.append(c < ' ' ? String.format("\\u%04x", (int) c) : c);
             }
         }
         return sb.append("\"").toString();
     }
 
-    private String unescapeJson(String text) {
-        if (text == null)
+    private String unescapeJson(String s) {
+        if (s == null)
             return "";
         StringBuilder sb = new StringBuilder();
-        boolean escaped = false;
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (escaped) {
+        boolean esc = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (esc) {
                 switch (c) {
-                    case '"':
-                        sb.append('"');
-                        break;
-                    case '\\':
-                        sb.append('\\');
-                        break;
                     case 'n':
                         sb.append('\n');
                         break;
@@ -309,9 +269,9 @@ public class GeminiClient {
                         sb.append('\t');
                         break;
                     case 'u':
-                        if (i + 4 < text.length()) {
+                        if (i + 4 < s.length()) {
                             try {
-                                sb.append((char) Integer.parseInt(text.substring(i + 1, i + 5), 16));
+                                sb.append((char) Integer.parseInt(s.substring(i + 1, i + 5), 16));
                                 i += 4;
                             } catch (Exception e) {
                                 sb.append("\\u");
@@ -321,12 +281,11 @@ public class GeminiClient {
                     default:
                         sb.append(c);
                 }
-                escaped = false;
-            } else if (c == '\\') {
-                escaped = true;
-            } else {
+                esc = false;
+            } else if (c == '\\')
+                esc = true;
+            else
                 sb.append(c);
-            }
         }
         return sb.toString();
     }

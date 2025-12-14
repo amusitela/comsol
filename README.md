@@ -233,11 +233,11 @@ model.result().export("anim1").set("frames", "all");  // 导出所有时间步
 
 ## 🤖 AI 配置助手 (NEW!)
 
-本项目集成了 **Gemini AI** 自然语言配置功能，让你可以用自然语言描述来修改仿真参数。
+本项目集成了 **Qwen AI** 自然语言配置功能，让你可以用自然语言描述来修改仿真参数。
 
 ### 设置步骤
 
-1. **获取 Gemini API Key**
+1. **获取 Qwen API Key**
 
    - 访问 [Google AI Studio](https://aistudio.google.com/)
    - 登录 Google 账号并创建 API Key（免费）
@@ -247,13 +247,13 @@ model.result().export("anim1").set("frames", "all");  // 导出所有时间步
    在 PowerShell 中临时设置：
 
    ```powershell
-   $env:GEMINI_API_KEY = "你的API密钥"
+   $env:Qwen_API_KEY = "你的API密钥"
    ```
 
    或永久设置（需管理员权限）：
 
    ```powershell
-   [System.Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "你的API密钥", "User")
+   [System.Environment]::SetEnvironmentVariable("Qwen_API_KEY", "你的API密钥", "User")
    ```
 
 3. **启动 GUI**
