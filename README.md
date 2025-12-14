@@ -231,63 +231,172 @@ model.result().export("anim1").set("frames", "all");  // 导出所有时间步
 
 ---
 
-## 🤖 AI 配置助手 (NEW!)
+## AI 配置助手
 
-本项目集成了 **Qwen AI** 自然语言配置功能，让你可以用自然语言描述来修改仿真参数。
+本项目集成了 **AI 自然语言配置功能**，支持 **通义千问 (Qwen)** 和 **DeepSeek** 两个 AI 服务商，让你可以用自然语言描述来修改仿真参数。
 
-### 设置步骤
+### 获取 API Key
 
-1. **获取 Qwen API Key**
+**方式一：阿里通义千问 (推荐)**
 
-   - 访问 [Google AI Studio](https://aistudio.google.com/)
-   - 登录 Google 账号并创建 API Key（免费）
+1. 访问 [阿里云 DashScope](https://dashscope.console.aliyun.com/)
+2. 注册/登录阿里云账号
+3. 开通 DashScope 服务（有免费额度）
+4. 创建 API Key
 
-2. **设置环境变量**
+**方式二：DeepSeek (备用)**
 
-   在 PowerShell 中临时设置：
+1. 访问 [DeepSeek 开放平台](https://platform.deepseek.com/)
+2. 注册账号
+3. 获取 API Key（有免费额度）
 
-   ```powershell
-   $env:Qwen_API_KEY = "你的API密钥"
-   ```
+### 配置 API Key
 
-   或永久设置（需管理员权限）：
+在项目根目录创建 `.env` 文件：
 
-   ```powershell
-   [System.Environment]::SetEnvironmentVariable("Qwen_API_KEY", "你的API密钥", "User")
-   ```
+```env
+# 阿里通义千问 (主要)
+QWEN_API_KEY=你的阿里API_Key
 
-3. **启动 GUI**
-   - 运行 `run_gui.bat`
-   - 切换到 **"🤖 AI 助手"** 标签页
-   - 在输入框中用自然语言描述你想要的配置修改
+# DeepSeek (备用，可选)
+DEEPSEEK_API_KEY=你的DeepSeek_API_Key
+```
+
+> 配置一个即可使用，建议两个都配置以实现自动降级。
+
+### 启动 GUI
+
+```powershell
+# 编译
+javac -encoding UTF-8 SimulationConfig.java ConfigManager.java QwenClient.java AIConfigParser.java CylinderFlowGUI.java
+
+# 运行
+java CylinderFlowGUI
+```
+
+或直接运行 `run_gui.bat`（需要 COMSOL 环境）。
 
 ### 使用示例
 
 ```
-👤 你: 把入口速度改成 0.05 m/s，使用水作为流体
+你: 把入口速度改成 0.05 m/s，使用水作为流体
 
-🤖 AI: 好的，我将为您进行以下修改：
-    - 入口速度 (inletVelocity): 0.031 → 0.05
-    - 流体名称 (fluidName): Air → Water
-    - 密度 (density): 1.225 → 998.0
-    - 动力粘度 (dynamicViscosity): 1.7894e-5 → 1.002e-3
+AI: 好的，我将为您进行以下修改：
+    - 入口速度 (inletVelocity): 0.031 -> 0.05
+    - 流体名称 (fluidName): Air -> Water
+    - 密度 (density): 1.225 -> 998.0
+    - 动力粘度 (dynamicViscosity): 1.7894E-5 -> 1.002E-3
 
-👤 你: 确认  →  点击 [✓ 应用变更] 按钮
+点击 [应用变更] 按钮确认
 ```
 
 ### 支持的自然语言命令
 
-- **修改几何参数**: "把圆柱半径改成 0.03 米"
+- **修改几何参数**: "把圆柱半径改成 0.03 米" / "域宽度设为 3 米"
+- **设置边界条件**: "入口改成压力边界" / "上边界改成壁面" / "圆柱壁面使用滑移条件"
 - **切换流体**: "使用水作为流体" / "换成空气"
-- **调整速度**: "入口速度设为 0.1 m/s"
-- **修改仿真时间**: "把仿真时间延长到 300 秒"
-- **网格控制**: "加密网格，最大单元尺寸 0.005"
+- **调整速度/压力**: "入口速度设为 0.1 m/s" / "出口压力改成 100 Pa"
+- **修改仿真时间**: "把仿真时间延长到 300 秒" / "时间步长改成 0.2 秒"
+- **网格控制**: "加密网格，最大单元尺寸 0.005" / "网格精度等级改成 5"
 - **输出控制**: "不要导出动画" / "帧率改成 30 fps"
 
-### 工作原理
+---
 
-1. AI 读取当前所有配置参数
-2. 理解你的自然语言意图
-3. 生成结构化的配置修改建议
-4. 在预览区显示变更对比（旧值 → 新值）
-5. 用户确认后应用到 GUI，可立即保存或运行仿真
+## 常见问题解答 (FAQ)
+
+### Q1: 编译时报错 "找不到符号 Model" 或 "程序包 com.comsol.model 不存在"
+
+**原因**: `CylinderFlow.java` 依赖 COMSOL 的 Java 库，不能用普通 `javac` 编译。
+
+**解决方案**:
+
+- 如果只想运行 GUI 配置界面，请只编译 GUI 相关文件：
+  ```powershell
+  javac -encoding UTF-8 SimulationConfig.java ConfigManager.java QwenClient.java AIConfigParser.java CylinderFlowGUI.java
+  ```
+- 如果要运行仿真，请使用 `run_comsol.bat`（需要安装 COMSOL 并配置路径）
+
+### Q2: 编译时报错 "类重复: SimulationConfig"
+
+**原因**: 同一个类在多个文件中重复定义。
+
+**解决方案**: 确保 `SimulationConfig.java` 是独立文件，`CylinderFlowGUI.java` 中不要有重复的类定义。
+
+### Q3: GUI 界面显示乱码（方框或问号）
+
+**原因**: 编译时未指定 UTF-8 编码。
+
+**解决方案**: 编译时添加 `-encoding UTF-8` 参数：
+
+```powershell
+javac -encoding UTF-8 *.java
+```
+
+### Q4: AI 助手显示 "API Key 未配置"
+
+**原因**: 未创建 `.env` 文件或 API Key 格式错误。
+
+**解决方案**:
+
+1. 在项目根目录创建 `.env` 文件
+2. 填入正确的 API Key：
+   ```env
+   QWEN_API_KEY=sk-xxxxxxxxxxxxxxxx
+   ```
+3. 重启 GUI
+
+### Q5: AI 请求失败 (HTTP 429)
+
+**原因**: API 请求配额已满（免费版有限制）。
+
+**解决方案**:
+
+- 等待几秒后重试
+- 切换到其他 AI 服务商（同时配置 QWEN 和 DEEPSEEK 可自动降级）
+- 升级为付费版本
+
+### Q6: AI 请求失败 (HTTP 401)
+
+**原因**: API Key 无效或已过期。
+
+**解决方案**: 检查 `.env` 文件中的 API Key 是否正确，重新生成新的 Key。
+
+### Q7: 运行 `run_gui.bat` 时报错 "找不到 comsolmphserver"
+
+**原因**: COMSOL 未安装或路径配置错误。
+
+**解决方案**:
+
+1. 确保已安装 COMSOL Multiphysics 6.0
+2. 编辑 `run_gui.bat`，修改 `COMSOL_ROOT` 为你的实际安装路径：
+   ```batch
+   set COMSOL_ROOT=C:\Program Files\COMSOL\COMSOL60\Multiphysics
+   ```
+
+### Q8: 仿真运行很慢或内存不足
+
+**解决方案**:
+
+- 减小 `endTime`（仿真结束时间）
+- 增大 `timeStep`（时间步长）
+- 降低网格精度（增大 `meshMaxSize`）
+- 减少输出帧数（降低 `animationMaxFrames`）
+
+---
+
+## 文件结构
+
+```
+comsol/
+├── CylinderFlow.java      # COMSOL 仿真主程序
+├── CylinderFlowGUI.java   # GUI 配置界面
+├── SimulationConfig.java  # 配置数据类
+├── ConfigManager.java     # 配置文件管理
+├── QwenClient.java        # AI API 客户端
+├── AIConfigParser.java    # AI 响应解析器
+├── config.json            # 配置文件
+├── .env                   # API Key 配置（自行创建）
+├── run_gui.bat            # GUI 启动脚本
+├── run_comsol.bat         # COMSOL 仿真脚本
+└── README.md              # 本文档
+```
