@@ -1,11 +1,13 @@
 /*
  * CylinderFlowGUI.java - COMSOL 仿真配置 GUI
  * 避免匿名内部类，兼容 COMSOL 编译器
+ * 集成 Gemini AI 自然语言配置助手
  */
 
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -14,9 +16,12 @@ import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.swing.BorderFactory;
@@ -31,9 +36,12 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
+import javax.swing.text.DefaultCaret;
 
 public class CylinderFlowGUI extends JFrame implements ActionListener {
 
@@ -44,6 +52,15 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
     // Buttons as fields for action handling
     private JButton loadBtn, saveBtn, defaultBtn, runBtn;
 
+    // AI 助手相关字段
+    private GeminiClient geminiClient;
+    private JTextArea aiChatHistory;
+    private JTextField aiInputField;
+    private JButton aiSendBtn, aiApplyBtn, aiClearBtn;
+    private JTextArea aiChangesPreview;
+    private List<AIConfigParser.ConfigChange> pendingChanges;
+    private boolean aiProcessing = false;
+
     // Colors - Light Theme for Better Readability
     private static final Color BG_DARK = new Color(245, 245, 250);
     private static final Color BG_PANEL = new Color(255, 255, 255);
@@ -53,11 +70,20 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
     private static final Color ACCENT_BLUE = new Color(25, 118, 210);
     private static final Color ACCENT_GREEN = new Color(46, 125, 50);
     private static final Color ACCENT_ORANGE = new Color(230, 81, 0);
+    private static final Color ACCENT_PURPLE = new Color(103, 58, 183);
     private static final Color BORDER_COLOR = new Color(200, 200, 210);
 
     public CylinderFlowGUI() {
         loadConfig();
+        initGeminiClient();
         initUI();
+    }
+
+    private void initGeminiClient() {
+        geminiClient = new GeminiClient();
+        if (!geminiClient.isConfigured()) {
+            System.out.println("提示: 设置环境变量 GEMINI_API_KEY 以启用 AI 助手功能");
+        }
     }
 
     private void loadConfig() {
@@ -130,6 +156,7 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         tabbedPane.addTab("网格参数", createMeshPanel());
         tabbedPane.addTab("求解参数", createSolverPanel());
         tabbedPane.addTab("输出参数", createOutputPanel());
+        tabbedPane.addTab("🤖 AI 助手", createAIPanel());
 
         return tabbedPane;
     }
@@ -312,6 +339,272 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         return wrapInScrollPane(panel);
     }
 
+    // ============================================
+    // AI 助手面板
+    // ============================================
+
+    private JPanel createAIPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBackground(BG_PANEL);
+        panel.setBorder(new EmptyBorder(15, 15, 15, 15));
+
+        // 顶部状态栏
+        JPanel statusPanel = new JPanel(new BorderLayout());
+        statusPanel.setBackground(BG_PANEL);
+
+        JLabel aiTitle = new JLabel("🤖 AI 配置助手 (Gemini)");
+        aiTitle.setFont(new Font("Microsoft YaHei UI", Font.BOLD, 16));
+        aiTitle.setForeground(ACCENT_PURPLE);
+
+        JLabel statusLabel = new JLabel();
+        if (geminiClient.isConfigured()) {
+            statusLabel.setText("✓ API 已配置");
+            statusLabel.setForeground(ACCENT_GREEN);
+        } else {
+            statusLabel.setText("✗ 请设置环境变量 GEMINI_API_KEY");
+            statusLabel.setForeground(ACCENT_ORANGE);
+        }
+        statusLabel.setFont(new Font("Microsoft YaHei UI", Font.PLAIN, 12));
+
+        statusPanel.add(aiTitle, BorderLayout.WEST);
+        statusPanel.add(statusLabel, BorderLayout.EAST);
+
+        // 聊天历史区域
+        aiChatHistory = new JTextArea();
+        aiChatHistory.setEditable(false);
+        aiChatHistory.setLineWrap(true);
+        aiChatHistory.setWrapStyleWord(true);
+        aiChatHistory.setBackground(new Color(248, 248, 252));
+        aiChatHistory.setForeground(TEXT_PRIMARY);
+        aiChatHistory.setFont(new Font("Microsoft YaHei UI", Font.PLAIN, 13));
+        aiChatHistory.setBorder(new EmptyBorder(10, 10, 10, 10));
+        aiChatHistory.setText(
+                "欢迎使用 AI 配置助手！\n\n你可以用自然语言描述想要修改的配置，例如：\n• \"把入口速度改成 0.05 m/s\"\n• \"使用水作为流体\"\n• \"把仿真时间延长到 300 秒\"\n• \"加密网格，把最大单元改成 0.005\"\n\n---\n\n");
+
+        // 自动滚动到底部
+        DefaultCaret caret = (DefaultCaret) aiChatHistory.getCaret();
+        caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
+
+        JScrollPane chatScrollPane = new JScrollPane(aiChatHistory);
+        chatScrollPane.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
+        chatScrollPane.setPreferredSize(new Dimension(400, 200));
+
+        // 变更预览区域
+        JPanel previewPanel = new JPanel(new BorderLayout(5, 5));
+        previewPanel.setBackground(BG_PANEL);
+        previewPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(ACCENT_BLUE, 1),
+                "待应用的变更",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("Microsoft YaHei UI", Font.BOLD, 12),
+                ACCENT_BLUE));
+
+        aiChangesPreview = new JTextArea();
+        aiChangesPreview.setEditable(false);
+        aiChangesPreview.setLineWrap(true);
+        aiChangesPreview.setWrapStyleWord(true);
+        aiChangesPreview.setBackground(new Color(240, 248, 255));
+        aiChangesPreview.setForeground(TEXT_PRIMARY);
+        aiChangesPreview.setFont(new Font("Consolas", Font.PLAIN, 12));
+        aiChangesPreview.setBorder(new EmptyBorder(8, 8, 8, 8));
+        aiChangesPreview.setText("(暂无变更)");
+
+        JScrollPane previewScrollPane = new JScrollPane(aiChangesPreview);
+        previewScrollPane.setPreferredSize(new Dimension(400, 100));
+        previewScrollPane.setBorder(null);
+
+        // 变更操作按钮
+        JPanel changesBtnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        changesBtnPanel.setBackground(BG_PANEL);
+
+        aiApplyBtn = new JButton("✓ 应用变更");
+        aiApplyBtn.setBackground(ACCENT_GREEN);
+        aiApplyBtn.setForeground(Color.WHITE);
+        aiApplyBtn.setFocusPainted(false);
+        aiApplyBtn.setBorderPainted(false);
+        aiApplyBtn.setEnabled(false);
+        aiApplyBtn.addActionListener(this);
+
+        aiClearBtn = new JButton("✗ 清除");
+        aiClearBtn.setBackground(ACCENT_ORANGE);
+        aiClearBtn.setForeground(Color.WHITE);
+        aiClearBtn.setFocusPainted(false);
+        aiClearBtn.setBorderPainted(false);
+        aiClearBtn.setEnabled(false);
+        aiClearBtn.addActionListener(this);
+
+        changesBtnPanel.add(aiClearBtn);
+        changesBtnPanel.add(aiApplyBtn);
+
+        previewPanel.add(previewScrollPane, BorderLayout.CENTER);
+        previewPanel.add(changesBtnPanel, BorderLayout.SOUTH);
+
+        // 输入区域
+        JPanel inputPanel = new JPanel(new BorderLayout(8, 0));
+        inputPanel.setBackground(BG_PANEL);
+        inputPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
+
+        aiInputField = new JTextField();
+        aiInputField.setFont(new Font("Microsoft YaHei UI", Font.PLAIN, 14));
+        aiInputField.setBackground(BG_INPUT);
+        aiInputField.setForeground(TEXT_PRIMARY);
+        aiInputField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER_COLOR, 1),
+                BorderFactory.createEmptyBorder(10, 12, 10, 12)));
+
+        // 添加回车发送功能
+        aiInputField.addKeyListener(new KeyListener() {
+            public void keyTyped(KeyEvent e) {
+            }
+
+            public void keyReleased(KeyEvent e) {
+            }
+
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER && !aiProcessing) {
+                    doAISend();
+                }
+            }
+        });
+
+        aiSendBtn = new JButton("发送");
+        aiSendBtn.setBackground(ACCENT_PURPLE);
+        aiSendBtn.setForeground(Color.WHITE);
+        aiSendBtn.setFocusPainted(false);
+        aiSendBtn.setBorderPainted(false);
+        aiSendBtn.setPreferredSize(new Dimension(80, 40));
+        aiSendBtn.addActionListener(this);
+
+        inputPanel.add(aiInputField, BorderLayout.CENTER);
+        inputPanel.add(aiSendBtn, BorderLayout.EAST);
+
+        // 使用 JSplitPane 分割聊天区和预览区
+        JPanel chatPanel = new JPanel(new BorderLayout());
+        chatPanel.add(chatScrollPane, BorderLayout.CENTER);
+
+        JPanel centerPanel = new JPanel(new BorderLayout(0, 10));
+        centerPanel.setBackground(BG_PANEL);
+        centerPanel.add(chatPanel, BorderLayout.CENTER);
+        centerPanel.add(previewPanel, BorderLayout.SOUTH);
+
+        // 组装面板
+        panel.add(statusPanel, BorderLayout.NORTH);
+        panel.add(centerPanel, BorderLayout.CENTER);
+        panel.add(inputPanel, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    // AI 发送消息
+    private void doAISend() {
+        String userInput = aiInputField.getText().trim();
+        if (userInput.isEmpty())
+            return;
+
+        if (!geminiClient.isConfigured()) {
+            appendToChatHistory("系统", "请先设置环境变量 GEMINI_API_KEY 以使用 AI 助手功能。");
+            return;
+        }
+
+        // 显示用户消息
+        appendToChatHistory("你", userInput);
+        aiInputField.setText("");
+        aiInputField.setEnabled(false);
+        aiSendBtn.setEnabled(false);
+        aiProcessing = true;
+
+        // 同步当前 UI 到 config
+        syncUIToConfig();
+
+        // 在后台线程调用 AI API
+        SwingWorker<AIConfigParser.ParseResult, Void> worker = new SwingWorker<AIConfigParser.ParseResult, Void>() {
+            @Override
+            protected AIConfigParser.ParseResult doInBackground() throws Exception {
+                String systemPrompt = AIConfigParser.generateSystemPrompt(config);
+                String response = geminiClient.chat(userInput, systemPrompt);
+                return AIConfigParser.parseAIResponse(response, config);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    AIConfigParser.ParseResult result = get();
+                    handleAIResponse(result);
+                } catch (Exception e) {
+                    appendToChatHistory("AI", "请求失败: " + e.getMessage());
+                }
+                aiInputField.setEnabled(true);
+                aiSendBtn.setEnabled(true);
+                aiProcessing = false;
+                aiInputField.requestFocus();
+            }
+        };
+        worker.execute();
+    }
+
+    // 处理 AI 响应
+    private void handleAIResponse(AIConfigParser.ParseResult result) {
+        // 显示 AI 回复
+        appendToChatHistory("AI", result.message);
+
+        if (result.success && result.changes != null && !result.changes.isEmpty()) {
+            // 有配置变更，显示在预览区
+            pendingChanges = result.changes;
+            StringBuilder sb = new StringBuilder();
+            for (AIConfigParser.ConfigChange change : result.changes) {
+                sb.append(change.fieldLabel).append(" (").append(change.fieldName).append(")\n");
+                sb.append("  ").append(change.oldValue).append(" → ").append(change.newValue).append("\n\n");
+            }
+            aiChangesPreview.setText(sb.toString());
+            aiApplyBtn.setEnabled(true);
+            aiClearBtn.setEnabled(true);
+        } else if (result.error != null) {
+            appendToChatHistory("系统", "解析错误: " + result.error);
+        }
+    }
+
+    // 追加聊天记录
+    private void appendToChatHistory(String sender, String message) {
+        String prefix = "";
+        if ("你".equals(sender)) {
+            prefix = "👤 你: ";
+        } else if ("AI".equals(sender)) {
+            prefix = "🤖 AI: ";
+        } else {
+            prefix = "⚙️ " + sender + ": ";
+        }
+        aiChatHistory.append(prefix + message + "\n\n");
+    }
+
+    // 应用 AI 建议的变更
+    private void doAIApplyChanges() {
+        if (pendingChanges == null || pendingChanges.isEmpty())
+            return;
+
+        // 应用变更到 config
+        AIConfigParser.applyChanges(config, pendingChanges);
+
+        // 同步到 UI
+        syncConfigToUI();
+
+        // 清除待应用变更
+        appendToChatHistory("系统", "已应用 " + pendingChanges.size() + " 项配置变更！");
+        pendingChanges = null;
+        aiChangesPreview.setText("(变更已应用)");
+        aiApplyBtn.setEnabled(false);
+        aiClearBtn.setEnabled(false);
+    }
+
+    // 清除待应用变更
+    private void doAIClearChanges() {
+        pendingChanges = null;
+        aiChangesPreview.setText("(已清除)");
+        aiApplyBtn.setEnabled(false);
+        aiClearBtn.setEnabled(false);
+        appendToChatHistory("系统", "已清除待应用的变更。");
+    }
+
     private JPanel createButtonPanel() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 10));
         panel.setBackground(BG_DARK);
@@ -343,6 +636,12 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
             doResetDefault();
         else if (src == runBtn)
             doRunSimulation();
+        else if (src == aiSendBtn)
+            doAISend();
+        else if (src == aiApplyBtn)
+            doAIApplyChanges();
+        else if (src == aiClearBtn)
+            doAIClearChanges();
     }
 
     // UI Helpers
@@ -704,207 +1003,5 @@ public class CylinderFlowGUI extends JFrame implements ActionListener {
         }
         CylinderFlowGUI gui = new CylinderFlowGUI();
         gui.setVisible(true);
-    }
-}
-
-// ============================================
-// SimulationConfig - 配置数据类
-// ============================================
-class SimulationConfig {
-    public double domainWidth = 2.2;
-    public double domainHeight = 1.0;
-    public double cylinderRadius = 0.05;
-    public double cylinderX = 0.5;
-    public double cylinderY = 0.5;
-    public String inletType = "Velocity";
-    public double inletVelocity = 0.031;
-    public double inletPressure = 0.0;
-    public String outletType = "Pressure";
-    public double outletPressure = 0.0;
-    public double outletVelocity = 0.0;
-    public String topBoundaryType = "Symmetry";
-    public String bottomBoundaryType = "Symmetry";
-    public String cylinderWallType = "Wall";
-    public String cylinderWallCondition = "NoSlip";
-    public String flowType = "Laminar";
-    public String equationForm = "Transient";
-    public String fluidName = "Air";
-    public double density = 1.225;
-    public double dynamicViscosity = 1.7894e-5;
-    public int meshSizeLevel = 3;
-    public double meshMaxSize = 0.01;
-    public double meshMinSize = 0.0005;
-    public double cylinderMeshMaxSize = 0.002;
-    public double startTime = 0.0;
-    public double endTime = 200.0;
-    public double timeStep = 0.5;
-    public String outputDir = "";
-    public String modelFileName = "CylinderFlow.mph";
-    public boolean exportVelocity = true;
-    public boolean exportVorticity = true;
-    public boolean exportAnimation = true;
-    public int animationFps = 60;
-    public int animationMaxFrames = 200;
-
-    public static SimulationConfig getDefault() {
-        return new SimulationConfig();
-    }
-
-    public String getTimeListString() {
-        return "range(" + startTime + "," + timeStep + "," + endTime + ")";
-    }
-
-    public String getEffectiveOutputDir() {
-        if (outputDir == null || outputDir.isEmpty())
-            return System.getProperty("user.dir");
-        return outputDir;
-    }
-}
-
-// ============================================
-// ConfigManager - JSON 配置管理
-// ============================================
-class ConfigManager {
-    public static void saveConfig(SimulationConfig cfg, String path) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\n");
-        sb.append("  \"domainWidth\": ").append(cfg.domainWidth).append(",\n");
-        sb.append("  \"domainHeight\": ").append(cfg.domainHeight).append(",\n");
-        sb.append("  \"cylinderRadius\": ").append(cfg.cylinderRadius).append(",\n");
-        sb.append("  \"cylinderX\": ").append(cfg.cylinderX).append(",\n");
-        sb.append("  \"cylinderY\": ").append(cfg.cylinderY).append(",\n");
-        sb.append("  \"inletType\": \"").append(cfg.inletType).append("\",\n");
-        sb.append("  \"inletVelocity\": ").append(cfg.inletVelocity).append(",\n");
-        sb.append("  \"inletPressure\": ").append(cfg.inletPressure).append(",\n");
-        sb.append("  \"outletType\": \"").append(cfg.outletType).append("\",\n");
-        sb.append("  \"outletPressure\": ").append(cfg.outletPressure).append(",\n");
-        sb.append("  \"outletVelocity\": ").append(cfg.outletVelocity).append(",\n");
-        sb.append("  \"topBoundaryType\": \"").append(cfg.topBoundaryType).append("\",\n");
-        sb.append("  \"bottomBoundaryType\": \"").append(cfg.bottomBoundaryType).append("\",\n");
-        sb.append("  \"cylinderWallType\": \"").append(cfg.cylinderWallType).append("\",\n");
-        sb.append("  \"cylinderWallCondition\": \"").append(cfg.cylinderWallCondition).append("\",\n");
-        sb.append("  \"flowType\": \"").append(cfg.flowType).append("\",\n");
-        sb.append("  \"equationForm\": \"").append(cfg.equationForm).append("\",\n");
-        sb.append("  \"fluidName\": \"").append(cfg.fluidName).append("\",\n");
-        sb.append("  \"density\": ").append(cfg.density).append(",\n");
-        sb.append("  \"dynamicViscosity\": ").append(cfg.dynamicViscosity).append(",\n");
-        sb.append("  \"meshSizeLevel\": ").append(cfg.meshSizeLevel).append(",\n");
-        sb.append("  \"meshMaxSize\": ").append(cfg.meshMaxSize).append(",\n");
-        sb.append("  \"meshMinSize\": ").append(cfg.meshMinSize).append(",\n");
-        sb.append("  \"cylinderMeshMaxSize\": ").append(cfg.cylinderMeshMaxSize).append(",\n");
-        sb.append("  \"startTime\": ").append(cfg.startTime).append(",\n");
-        sb.append("  \"endTime\": ").append(cfg.endTime).append(",\n");
-        sb.append("  \"timeStep\": ").append(cfg.timeStep).append(",\n");
-        sb.append("  \"outputDir\": \"").append(cfg.outputDir).append("\",\n");
-        sb.append("  \"modelFileName\": \"").append(cfg.modelFileName).append("\",\n");
-        sb.append("  \"exportVelocity\": ").append(cfg.exportVelocity).append(",\n");
-        sb.append("  \"exportVorticity\": ").append(cfg.exportVorticity).append(",\n");
-        sb.append("  \"exportAnimation\": ").append(cfg.exportAnimation).append(",\n");
-        sb.append("  \"animationFps\": ").append(cfg.animationFps).append(",\n");
-        sb.append("  \"animationMaxFrames\": ").append(cfg.animationMaxFrames).append("\n");
-        sb.append("}");
-
-        java.nio.file.Files.write(java.nio.file.Paths.get(path), sb.toString().getBytes("UTF-8"));
-        System.out.println("Config saved: " + path);
-    }
-
-    public static SimulationConfig loadConfig(String path) throws IOException {
-        SimulationConfig cfg = new SimulationConfig();
-        if (!java.nio.file.Files.exists(java.nio.file.Paths.get(path)))
-            return cfg;
-
-        String c = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(path)), "UTF-8");
-
-        cfg.domainWidth = parseDouble(c, "domainWidth", cfg.domainWidth);
-        cfg.domainHeight = parseDouble(c, "domainHeight", cfg.domainHeight);
-        cfg.cylinderRadius = parseDouble(c, "cylinderRadius", cfg.cylinderRadius);
-        cfg.cylinderX = parseDouble(c, "cylinderX", cfg.cylinderX);
-        cfg.cylinderY = parseDouble(c, "cylinderY", cfg.cylinderY);
-        cfg.inletType = parseString(c, "inletType", cfg.inletType);
-        cfg.inletVelocity = parseDouble(c, "inletVelocity", cfg.inletVelocity);
-        cfg.inletPressure = parseDouble(c, "inletPressure", cfg.inletPressure);
-        cfg.outletType = parseString(c, "outletType", cfg.outletType);
-        cfg.outletPressure = parseDouble(c, "outletPressure", cfg.outletPressure);
-        cfg.outletVelocity = parseDouble(c, "outletVelocity", cfg.outletVelocity);
-        cfg.topBoundaryType = parseString(c, "topBoundaryType", cfg.topBoundaryType);
-        cfg.bottomBoundaryType = parseString(c, "bottomBoundaryType", cfg.bottomBoundaryType);
-        cfg.cylinderWallType = parseString(c, "cylinderWallType", cfg.cylinderWallType);
-        cfg.cylinderWallCondition = parseString(c, "cylinderWallCondition", cfg.cylinderWallCondition);
-        cfg.flowType = parseString(c, "flowType", cfg.flowType);
-        cfg.equationForm = parseString(c, "equationForm", cfg.equationForm);
-        cfg.fluidName = parseString(c, "fluidName", cfg.fluidName);
-        cfg.density = parseDouble(c, "density", cfg.density);
-        cfg.dynamicViscosity = parseDouble(c, "dynamicViscosity", cfg.dynamicViscosity);
-        cfg.meshSizeLevel = parseInt(c, "meshSizeLevel", cfg.meshSizeLevel);
-        cfg.meshMaxSize = parseDouble(c, "meshMaxSize", cfg.meshMaxSize);
-        cfg.meshMinSize = parseDouble(c, "meshMinSize", cfg.meshMinSize);
-        cfg.cylinderMeshMaxSize = parseDouble(c, "cylinderMeshMaxSize", cfg.cylinderMeshMaxSize);
-        cfg.startTime = parseDouble(c, "startTime", cfg.startTime);
-        cfg.endTime = parseDouble(c, "endTime", cfg.endTime);
-        cfg.timeStep = parseDouble(c, "timeStep", cfg.timeStep);
-        cfg.outputDir = parseString(c, "outputDir", cfg.outputDir);
-        cfg.modelFileName = parseString(c, "modelFileName", cfg.modelFileName);
-        cfg.exportVelocity = parseBoolean(c, "exportVelocity", cfg.exportVelocity);
-        cfg.exportVorticity = parseBoolean(c, "exportVorticity", cfg.exportVorticity);
-        cfg.exportAnimation = parseBoolean(c, "exportAnimation", cfg.exportAnimation);
-        cfg.animationFps = parseInt(c, "animationFps", cfg.animationFps);
-        cfg.animationMaxFrames = parseInt(c, "animationMaxFrames", cfg.animationMaxFrames);
-
-        System.out.println("Config loaded: " + path);
-        return cfg;
-    }
-
-    private static double parseDouble(String json, String key, double defaultVal) {
-        try {
-            int idx = json.indexOf("\"" + key + "\":");
-            if (idx < 0)
-                return defaultVal;
-            int start = idx + key.length() + 3;
-            while (start < json.length() && Character.isWhitespace(json.charAt(start)))
-                start++;
-            int end = start;
-            while (end < json.length()
-                    && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '.' || json.charAt(end) == '-'
-                            || json.charAt(end) == 'e' || json.charAt(end) == 'E' || json.charAt(end) == '+'))
-                end++;
-            return Double.parseDouble(json.substring(start, end).trim());
-        } catch (Exception e) {
-            return defaultVal;
-        }
-    }
-
-    private static int parseInt(String json, String key, int defaultVal) {
-        try {
-            return (int) parseDouble(json, key, defaultVal);
-        } catch (Exception e) {
-            return defaultVal;
-        }
-    }
-
-    private static String parseString(String json, String key, String defaultVal) {
-        try {
-            int idx = json.indexOf("\"" + key + "\":");
-            if (idx < 0)
-                return defaultVal;
-            int start = json.indexOf('"', idx + key.length() + 3) + 1;
-            int end = json.indexOf('"', start);
-            return json.substring(start, end);
-        } catch (Exception e) {
-            return defaultVal;
-        }
-    }
-
-    private static boolean parseBoolean(String json, String key, boolean defaultVal) {
-        try {
-            int idx = json.indexOf("\"" + key + "\":");
-            if (idx < 0)
-                return defaultVal;
-            int start = idx + key.length() + 3;
-            while (start < json.length() && Character.isWhitespace(json.charAt(start)))
-                start++;
-            return json.substring(start, start + 4).equals("true");
-        } catch (Exception e) {
-            return defaultVal;
-        }
     }
 }

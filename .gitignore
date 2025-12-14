@@ -3,3 +3,4 @@
 *.mph
 *.gif
 *.png
+.env
